@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin · Photo Upload</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  .wrap { max-width: 980px; margin: 0 auto; padding: 32px 16px 64px; }
+  header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: clamp(1.6rem, 4vw, 2.2rem); }
+  header p { margin: 4px 0 0; color: var(--muted); }
+  .grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 24px; margin-top: 28px; }
+  @media (max-width: 760px) { .grid { grid-template-columns: 1fr; } }
+  /* Cream panels: re-point the theme colours so text, borders and buttons read on a light background */
+  .panel {
+    --ink: #2b2118; --muted: #7a6a58; --line: #d9c8a9;
+    background: var(--cream); color: var(--ink); border: 1px solid #e6d8bd; border-radius: 20px; padding: 22px;
+    box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .7);
+  }
+  .panel .btn:not(.ghost):not(.accent) { color: var(--cream); }
+  .panel .ghost { border-color: rgba(43, 33, 24, .45); }
+  .drop {
+    border: 2.5px dashed var(--line); border-radius: 16px; min-height: 280px;
+    display: grid; place-items: center; text-align: center; padding: 24px; cursor: pointer;
+    transition: border-color .2s, background .2s; position: relative; overflow: hidden;
+  }
+  .drop.over { border-color: var(--accent); background: rgba(200, 85, 61, .06); }
+  .drop .icon { line-height: 0; color: var(--accent); }
+  .drop strong { display: block; font-size: 1.15rem; margin: 10px 0 4px; }
+  .drop small { color: var(--muted); }
+  .drop img.preview { max-width: 100%; max-height: 260px; border-radius: 10px; }
+  .row { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+  .key { width: 100%; padding: .7rem 1rem; border-radius: 12px; border: 1px solid var(--line); background: #fffaf0; color: var(--ink); font: inherit; margin-top: 14px; display: none; }
+  .msg { margin-top: 12px; min-height: 1.2em; font-size: .95rem; }
+  .msg.err { color: var(--accent); }
+  .result { text-align: center; }
+  .result img.qr { width: 220px; max-width: 100%; border: 10px solid #fff; border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,.08); }
+  .result .link { word-break: break-all; font-size: .85rem; color: var(--muted); margin: 10px 0; }
+  .empty { color: var(--muted); text-align: center; padding: 40px 10px; }
+  .recent { margin-top: 28px; }
+  .thumbs { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 14px; margin-top: 12px; }
+  .thumb { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 8px; position: relative; }
+  .thumb img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; display: block; }
+  .thumb .acts { display: flex; justify-content: space-between; margin-top: 6px; font-size: .8rem; }
+  .thumb button { padding: 2px 8px; font-size: .75rem; background: transparent; color: var(--accent); border: 1px solid var(--line); }
+  .bar { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; margin-top: 12px; display: none; }
+  .bar div { height: 100%; width: 0; background: var(--accent); transition: width .1s; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1 class="brand">MomentX</h1>
+      <p>Drop a photo. A QR code is made instantly.</p>
+    </div>
+    <a class="btn ghost" href="/display" target="_blank">Open QR screen ↗</a>
+  </header>
+
+  <div class="grid">
+    <section class="panel">
+      <div class="drop" id="drop" tabindex="0">
+        <div id="dropInner">
+          <div class="icon">
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <strong>Drag &amp; drop a photo here</strong>
+          <small>or click to choose · JPG, PNG, WEBP, GIF · up to 15&nbsp;MB</small>
+        </div>
+      </div>
+      <input type="file" id="file" accept="image/*" hidden>
+      <input type="password" id="key" class="key" placeholder="Admin key">
+      <div class="bar" id="bar"><div></div></div>
+      <div class="row">
+        <button id="uploadBtn" class="accent" disabled>Upload &amp; make QR</button>
+        <button id="clearBtn" class="ghost" disabled>Clear</button>
+      </div>
+      <div class="msg" id="msg"></div>
+    </section>
+
+    <section class="panel result" id="result">
+      <div class="empty">Your QR code will appear here.</div>
+    </section>
+  </div>
+
+  <section class="recent">
+    <h2>Recent uploads</h2>
+    <div class="thumbs" id="thumbs"></div>
+  </section>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const drop = $('drop'), fileInput = $('file'), uploadBtn = $('uploadBtn'), clearBtn = $('clearBtn');
+const msg = $('msg'), keyInput = $('key'), bar = $('bar');
+let chosen = null, needsKey = false;
+const emptyDrop = $('dropInner').innerHTML; // restored by reset()
+
+fetch('/api/config').then(r => r.json()).then(c => {
+  needsKey = c.needsKey;
+  if (needsKey) { keyInput.style.display = 'block'; keyInput.value = localStorage.getItem('adminKey') || ''; }
+});
+
+function say(text, err) { msg.textContent = text; msg.className = 'msg' + (err ? ' err' : ''); }
+
+function choose(file) {
+  if (!file || !file.type.startsWith('image/')) return say('That is not an image file.', true);
+  chosen = file;
+  const url = URL.createObjectURL(file);
+  $('dropInner').innerHTML = `<img class="preview" src="${url}" alt=""><small style="display:block;margin-top:8px">${file.name}</small>`;
+  uploadBtn.disabled = false; clearBtn.disabled = false; say('');
+}
+function reset() {
+  chosen = null; fileInput.value = '';
+  $('dropInner').innerHTML = emptyDrop;
+  uploadBtn.disabled = true; clearBtn.disabled = true;
+}
+
+drop.addEventListener('click', () => fileInput.click());
+drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+fileInput.addEventListener('change', () => choose(fileInput.files[0]));
+['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
+['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
+drop.addEventListener('drop', e => choose(e.dataTransfer.files[0]));
+clearBtn.addEventListener('click', reset);
+
+uploadBtn.addEventListener('click', () => {
+  if (!chosen) return;
+  if (needsKey) localStorage.setItem('adminKey', keyInput.value);
+  const fd = new FormData(); fd.append('photo', chosen);
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', '/api/upload');
+  if (needsKey) xhr.setRequestHeader('x-admin-key', keyInput.value);
+  bar.style.display = 'block'; uploadBtn.disabled = true; say('Uploading…');
+  xhr.upload.onprogress = e => { if (e.lengthComputable) bar.firstElementChild.style.width = (e.loaded / e.total * 100) + '%'; };
+  xhr.onload = () => {
+    bar.style.display = 'none'; bar.firstElementChild.style.width = 0;
+    let data = {}; try { data = JSON.parse(xhr.responseText); } catch {}
+    if (xhr.status !== 200) { uploadBtn.disabled = false; return say(data.error || 'Upload failed.', true); }
+    say('Done! The QR screen now shows this photo.');
+    showResult(data); reset(); loadRecent();
+  };
+  xhr.onerror = () => { bar.style.display = 'none'; uploadBtn.disabled = false; say('Network error.', true); };
+  xhr.send(fd);
+});
+
+function showResult(p) {
+  $('result').innerHTML = `
+    <h2 style="margin-top:0">Scan me</h2>
+    <img class="qr" src="${p.qrUrl}" alt="QR code">
+    <div class="link">${p.viewUrl}</div>
+    <div class="row" style="justify-content:center">
+      <a class="btn" href="${p.qrUrl}" download="qr-${p.id}.png">Download QR</a>
+      <a class="btn ghost" href="${p.viewUrl}" target="_blank">Open page</a>
+    </div>`;
+}
+
+async function loadRecent() {
+  const list = await fetch('/api/photos').then(r => r.json());
+  $('thumbs').innerHTML = list.length ? '' : '<div class="empty">No uploads yet.</div>';
+  for (const p of list) {
+    const el = document.createElement('div'); el.className = 'thumb';
+    el.innerHTML = `<img src="${p.imageUrl}" alt="">
+      <div class="acts"><a href="#" data-show>QR</a><button data-del>Delete</button></div>`;
+    el.querySelector('[data-show]').onclick = e => { e.preventDefault(); showResult(p); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+    el.querySelector('[data-del]').onclick = async () => {
+      if (!confirm('Delete this photo?')) return;
+      const r = await fetch('/api/photos/' + p.id, { method: 'DELETE', headers: needsKey ? { 'x-admin-key': keyInput.value } : {} });
+      if (!r.ok) return say('Could not delete (check admin key).', true);
+      loadRecent();
+    };
+    $('thumbs').appendChild(el);
+  }
+}
+loadRecent();
+</script>
+</body>
+</html>

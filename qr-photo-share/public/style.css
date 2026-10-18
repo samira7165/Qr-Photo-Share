@@ -1,0 +1,55 @@
+:root {
+  --bg: #1b1b1b;
+  --ink: #ffffff;
+  --muted: #b3b3b3;
+  --accent: #e0592f;
+  --accent-2: #8a3a28;
+  --card: #232323;
+  --line: #333333;
+  --glow: rgba(176, 66, 40, 1);
+  --cream: #f4ead7;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: "Poppins", system-ui, sans-serif;
+  font-weight: 300;
+  color: var(--ink);
+  background-color: var(--bg);
+  background-image:
+    radial-gradient(ellipse 85% 110% at 100% 0%, var(--glow), rgba(120, 46, 30, .7) 35%, rgba(70, 30, 22, .35) 60%, transparent 85%);
+  background-attachment: fixed;
+  min-height: 100vh;
+}
+h1, h2, .display-font { font-family: "Poppins", system-ui, sans-serif; font-weight: 500; letter-spacing: -.01em; line-height: 1.15; }
+p { line-height: 1.6; }
+a { color: var(--accent); }
+button, .btn {
+  font: inherit; font-weight: 500; cursor: pointer; border: 0; border-radius: 999px;
+  padding: .75rem 1.4rem; background: var(--ink); color: var(--bg); text-decoration: none;
+  display: inline-flex; align-items: center; gap: .5rem; transition: transform .15s, opacity .15s, background .15s;
+}
+button:hover, .btn:hover { transform: translateY(-1px); }
+button:disabled { opacity: .4; cursor: default; transform: none; }
+.btn.ghost, button.ghost { background: transparent; color: var(--ink); border: 1px solid rgba(255, 255, 255, .5); }
+.btn.accent, button.accent { background: var(--accent); color: #fff; }
+
+/* Photo frame used on display + view pages */
+.frame {
+  position: relative; background: var(--cream); padding: 12px 12px 52px; border-radius: 6px;
+  border: 1px solid #e6d8bd;
+  box-shadow: 0 30px 60px -20px rgba(0, 0, 0, .7), 0 0 0 1px rgba(224, 89, 47, .08);
+}
+.frame img { display: block; width: 100%; height: auto; border-radius: 3px; }
+.frame .caption {
+  position: absolute; left: 0; right: 0; bottom: 16px; text-align: center;
+  font-weight: 300; letter-spacing: .12em; text-transform: uppercase; font-size: .75rem; color: #8a6f55;
+}
+/* MomentX logo: gold-to-orange wordmark */
+.brand {
+  display: inline-block;
+  font-weight: 800; letter-spacing: -.01em;
+  background: linear-gradient(180deg, #ffc94a 0%, #f5a623 55%, #e07b1f 100%);
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}
+.corner-flourish { color: var(--accent); opacity: .8; }

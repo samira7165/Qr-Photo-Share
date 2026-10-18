@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your photo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  .wrap { max-width: 520px; margin: 0 auto; padding: 36px 16px 48px; text-align: center; }
+  h1 { font-size: 2rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); margin: 0 0 32px; }
+  .frame { margin: 0 8px; }
+  .actions { display: flex; gap: 10px; justify-content: center; margin-top: 36px; flex-wrap: wrap; }
+  .err { color: var(--muted); padding-top: 30vh; }
+</style>
+</head>
+<body>
+<div class="wrap" id="root"><p class="sub">Loading…</p></div>
+<script>
+const id = location.pathname.split('/').pop();
+fetch('/api/photos/' + id).then(r => r.ok ? r.json() : Promise.reject()).then(p => {
+  document.getElementById('root').innerHTML = `
+    <h1>Here's your photo</h1>
+    <p class="sub">Save it, share it, keep it.</p>
+    <div class="frame"><img src="${p.imageUrl}" alt="Your photo"><div class="caption">✦ captured moment ✦</div></div>
+    <div class="actions">
+      <a class="btn accent" href="${p.imageUrl}" download="photo-${p.id}">⬇ Download</a>
+      <button class="btn ghost" id="share" hidden>Share</button>
+    </div>`;
+  const shareBtn = document.getElementById('share');
+  if (navigator.share) {
+    shareBtn.hidden = false;
+    shareBtn.onclick = () => navigator.share({ title: 'My photo', url: location.href }).catch(() => {});
+  }
+}).catch(() => {
+  document.getElementById('root').innerHTML = '<p class="err">Sorry, this photo was not found.</p>';
+});
+</script>
+</body>
+</html>

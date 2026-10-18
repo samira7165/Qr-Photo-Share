@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Scan for your photo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+<style>
+  body { display: grid; place-items: center; padding: 24px 16px; }
+  .stage { width: 100%; max-width: 1200px; display: grid; grid-template-columns: 1fr 1fr; gap: clamp(24px, 5vw, 72px); align-items: center; }
+  @media (max-width: 820px) { .stage { grid-template-columns: 1fr; } }
+  .photo-side { display: flex; justify-content: center; }
+  .photo-side .frame { width: min(100%, 460px); }
+  .photo-side .frame img { max-height: 62vh; object-fit: contain; background: var(--cream); }
+  .qr-side { text-align: center; }
+  .qr-side h1 { font-size: clamp(2rem, 5vw, 3.4rem); margin: 0 0 8px; line-height: 1.05; }
+  .qr-side p { color: var(--muted); font-size: 1.1rem; margin: 0 0 24px; }
+  .qr-card {
+    display: inline-block; background: #fff; padding: 22px; border-radius: 28px; position: relative;
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,.7);
+  }
+  .qr-card::before {
+    content: ""; position: absolute; inset: -10px; border-radius: 34px;
+    border: 3px dashed var(--accent); opacity: .55; pointer-events: none;
+  }
+  .qr-card img { display: block; width: min(60vw, 340px); height: auto; }
+  .hint { margin-top: 18px; font-size: .95rem; color: var(--muted); }
+  .waiting { text-align: center; color: var(--muted); }
+  .waiting h1 { color: var(--ink); }
+  .fade { animation: fade .6s ease; }
+  @keyframes fade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .stamp { display:inline-block; margin-bottom: 14px; padding: 4px 14px; border-radius: 99px; border: 1px solid var(--accent); color: var(--accent); font-size: .8rem; font-weight: 500; letter-spacing: .04em; text-transform: uppercase; }
+</style>
+</head>
+<body>
+<main id="root">
+  <div class="waiting"><h1>Waiting for a photo…</h1><p>Upload one from the admin page.</p></div>
+</main>
+
+<script>
+let currentId = null;
+async function tick() {
+  try {
+    const r = await fetch('/api/photos/latest', { cache: 'no-store' });
+    if (!r.ok) return;
+    const p = await r.json();
+    if (p.id === currentId) return;
+    currentId = p.id;
+    document.getElementById('root').innerHTML = `
+      <div class="stage fade">
+        <div class="photo-side">
+          <div class="frame"><img src="${p.imageUrl}" alt="Your photo"><div class="caption">✦ captured moment ✦</div></div>
+        </div>
+        <div class="qr-side">
+          <span class="stamp">Your photo is ready</span>
+          <h1>Scan to take it home</h1>
+          <p>Point your phone camera at the code</p>
+          <div class="qr-card"><img src="${p.qrUrl}" alt="QR code"></div>
+          <div class="hint">Opens the photo on your phone — tap download to save.</div>
+        </div>
+      </div>`;
+  } catch {}
+}
+tick();
+setInterval(tick, 3000); // checks for a new upload every 3 seconds
+</script>
+</body>
+</html>
