@@ -14,7 +14,8 @@ const DB_FILE = path.join(__dirname, 'data.json');
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
 // The QR code must point to an address the phone can reach.
-// If BASE_URL isn't set, use this computer's Wi-Fi/LAN IP (phone must be on same network).
+// Priority: BASE_URL env var → the public host the request came in on (e.g. Render) →
+// this computer's Wi-Fi/LAN IP when browsing on localhost (phone must be on same network).
 function lanIp() {
   for (const list of Object.values(os.networkInterfaces())) {
     for (const net of list || []) {
@@ -23,7 +24,13 @@ function lanIp() {
   }
   return 'localhost';
 }
-const BASE_URL = (process.env.BASE_URL || `http://${lanIp()}:${PORT}`).replace(/\/$/, '');
+const ENV_BASE_URL = (process.env.BASE_URL || '').replace(/\/$/, '');
+function baseUrl(req) {
+  if (ENV_BASE_URL) return ENV_BASE_URL;
+  const host = req.get('host') || '';
+  if (/^(localhost|127\.0\.0\.1)(:|$)/.test(host)) return `http://${lanIp()}:${PORT}`;
+  return `${req.protocol}://${host}`;
+}
 
 // ---- tiny JSON "database" ----
 function load() {
@@ -32,11 +39,11 @@ function load() {
 let photos = load();
 function save() { fs.writeFileSync(DB_FILE, JSON.stringify(photos, null, 2)); }
 
-const viewUrl = (id) => `${BASE_URL}/p/${id}`;
-const publicPhoto = (p) => ({
+const viewUrl = (req, id) => `${baseUrl(req)}/p/${id}`;
+const publicPhoto = (req, p) => ({
   id: p.id,
   imageUrl: `/uploads/${p.file}`,
-  viewUrl: viewUrl(p.id),
+  viewUrl: viewUrl(req, p.id),
   qrUrl: `/api/qr/${p.id}.png`,
   createdAt: p.createdAt,
 });
@@ -63,6 +70,7 @@ function requireAdmin(req, res, next) {
 }
 
 const app = express();
+app.set('trust proxy', true); // so req.protocol is https behind Render's proxy
 app.use('/uploads', express.static(UPLOAD_DIR, { maxAge: '7d' }));
 app.use('/static', express.static(path.join(__dirname, 'public')));
 
@@ -73,27 +81,27 @@ app.get('/display', (req, res) => res.sendFile(path.join(__dirname, 'public/disp
 app.get('/p/:id', (req, res) => res.sendFile(path.join(__dirname, 'public/view.html')));
 
 // API
-app.get('/api/config', (req, res) => res.json({ needsKey: !!ADMIN_KEY, baseUrl: BASE_URL }));
+app.get('/api/config', (req, res) => res.json({ needsKey: !!ADMIN_KEY, baseUrl: baseUrl(req) }));
 
 app.post('/api/upload', requireAdmin, upload.single('photo'), (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'Please upload a JPG, PNG, WEBP or GIF image.' });
   const photo = { id: req.photoId, file: req.file.filename, createdAt: Date.now() };
   photos.unshift(photo);
   save();
-  res.json(publicPhoto(photo));
+  res.json(publicPhoto(req, photo));
 });
 
-app.get('/api/photos', (req, res) => res.json(photos.slice(0, 50).map(publicPhoto)));
+app.get('/api/photos', (req, res) => res.json(photos.slice(0, 50).map((p) => publicPhoto(req, p))));
 
 app.get('/api/photos/latest', (req, res) => {
   if (!photos.length) return res.status(404).json({ error: 'No photos yet' });
-  res.json(publicPhoto(photos[0]));
+  res.json(publicPhoto(req, photos[0]));
 });
 
 app.get('/api/photos/:id', (req, res) => {
   const p = photos.find((x) => x.id === req.params.id);
   if (!p) return res.status(404).json({ error: 'Photo not found' });
-  res.json(publicPhoto(p));
+  res.json(publicPhoto(req, p));
 });
 
 app.delete('/api/photos/:id', requireAdmin, (req, res) => {
@@ -108,7 +116,7 @@ app.delete('/api/photos/:id', requireAdmin, (req, res) => {
 app.get('/api/qr/:id.png', async (req, res) => {
   const p = photos.find((x) => x.id === req.params.id);
   if (!p) return res.status(404).end();
-  const png = await QRCode.toBuffer(viewUrl(p.id), {
+  const png = await QRCode.toBuffer(viewUrl(req, p.id), {
     width: 600, margin: 1, errorCorrectionLevel: 'M',
     color: { dark: '#2b2118', light: '#ffffff' },
   });
@@ -124,5 +132,5 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`\n  Admin (upload):   http://localhost:${PORT}/admin`);
   console.log(`  Display (QR):     http://localhost:${PORT}/display`);
-  console.log(`  QR codes point to: ${BASE_URL}/p/<id>\n`);
+  console.log(`  QR codes point to: ${ENV_BASE_URL || 'the address you open the site on (LAN IP for localhost)'}/p/<id>\n`);
 });
