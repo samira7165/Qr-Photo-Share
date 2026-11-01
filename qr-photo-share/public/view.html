@@ -14,6 +14,13 @@
   .frame { margin: 0 8px; }
   .actions { display: flex; gap: 10px; justify-content: center; margin-top: 36px; flex-wrap: wrap; }
   .err { color: var(--muted); padding-top: 30vh; }
+  .frame img { max-height: 70vh; object-fit: contain; background: #fff; }
+  @media (min-width: 700px) { .wrap { max-width: 600px; padding-top: 56px; } h1 { font-size: 2.6rem; } }
+  @media (max-width: 480px) {
+    .wrap { padding: 24px 14px 36px; }
+    .frame { margin: 0; }
+    .actions .btn { flex: 1 1 140px; }
+  }
 </style>
 </head>
 <body>

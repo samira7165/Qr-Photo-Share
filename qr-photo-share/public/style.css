@@ -16,14 +16,18 @@ body {
   font-weight: 300;
   color: var(--ink);
   background-color: var(--bg);
-  background-image:
-    linear-gradient(rgba(0, 0, 0, .45), rgba(0, 0, 0, .45)),
-    url("/static/earth.webp");
-  background-size: cover;
-  background-position: center bottom;
-  background-attachment: fixed;
   min-height: 100vh;
+  min-height: 100dvh;
+  -webkit-text-size-adjust: 100%;
 }
+/* Fixed layer instead of background-attachment: fixed, which iOS Safari renders zoomed-in */
+body::before {
+  content: ""; position: fixed; inset: 0; z-index: -1;
+  background:
+    linear-gradient(rgba(0, 0, 0, .45), rgba(0, 0, 0, .45)),
+    url("/static/earth.webp") center bottom / cover no-repeat;
+}
+img { max-width: 100%; }
 @font-face {
   font-family: "Better Times";
   src: url("/static/fonts/BetterTimes.otf") format("opentype");
@@ -38,7 +42,8 @@ button, .btn {
   padding: .75rem 1.4rem; background: var(--ink); color: var(--bg); text-decoration: none;
   display: inline-flex; align-items: center; gap: .5rem; transition: transform .15s, opacity .15s, background .15s;
 }
-button:hover, .btn:hover { transform: translateY(-1px); }
+@media (hover: hover) { button:hover, .btn:hover { transform: translateY(-1px); } }
+button, .btn { min-height: 44px; justify-content: center; } /* comfortable touch target */
 button:disabled { opacity: .4; cursor: default; transform: none; }
 .btn.ghost, button.ghost { background: transparent; color: var(--ink); border: 1px solid rgba(255, 255, 255, .5); }
 .btn.accent, button.accent { background: var(--accent); color: #fff; }
