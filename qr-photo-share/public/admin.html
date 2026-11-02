@@ -80,6 +80,18 @@
     .row > button, .row > .btn { flex: 1 1 auto; white-space: nowrap; letter-spacing: .03em; padding-inline: 1rem; }
     .thumbs { grid-template-columns: repeat(2, 1fr); gap: 10px; }
   }
+  [hidden] { display: none !important; }
+  .gate { max-width: 460px; margin: 28px auto 0; text-align: center; }
+  .gate p { margin: 0 0 14px; color: var(--muted); }
+  .code-boxes { display: flex; gap: 10px; justify-content: center; margin: 6px 0 4px; }
+  .code-boxes input {
+    width: clamp(44px, 14vw, 62px); height: clamp(58px, 17vw, 76px); text-align: center; border-radius: 14px; border: 2px solid transparent;
+    background: #fff; color: #2b2118; font: 700 clamp(26px, 8vw, 34px) 'Poppins', sans-serif; outline: none; caret-color: var(--red);
+  }
+  .code-boxes input:focus { border-color: var(--gold); }
+  .timer { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .timer .left { font-weight: 600; font-variant-numeric: tabular-nums; color: var(--muted); }
+  .timer .left.low { color: #b3121b; }
   .bar { height: 6px; background: var(--line); border-radius: 99px; overflow: hidden; margin-top: 12px; display: none; }
   .bar div { height: 100%; width: 0; background: var(--accent); transition: width .1s; }
 </style>
@@ -93,6 +105,27 @@
     </div>
     <a class="btn ghost" href="/display" target="_blank">Open QR screen ↗</a>
   </header>
+
+  <!-- Step 1: the registration code from the Nescafe portal -->
+  <section class="panel gate" id="gate">
+    <div class="panel-head display-font">Enter your code</div>
+    <p id="gateLead">Type the 5-digit code you got when you registered.</p>
+    <div class="code-boxes" id="codeBoxes" role="group" aria-label="5-digit code">
+      <input inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="one-time-code" aria-label="Digit 1">
+      <input inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" aria-label="Digit 2">
+      <input inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" aria-label="Digit 3">
+      <input inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" aria-label="Digit 4">
+      <input inputmode="numeric" pattern="[0-9]*" maxlength="5" autocomplete="off" aria-label="Digit 5">
+    </div>
+    <div class="msg" id="gateMsg" role="alert"></div>
+    <div class="row" style="justify-content:center"><button id="verifyBtn" class="accent" disabled>Verify</button></div>
+  </section>
+
+  <div id="app" hidden>
+  <div class="timer" style="justify-content:space-between;margin-top:20px">
+    <span class="left" id="timeLeft">10:00</span>
+    <button id="doneTopBtn" class="btn ghost" style="color:var(--red-deep,#b3121b);border-color:currentColor">Done</button>
+  </div>
 
   <div class="grid">
     <section class="panel">
@@ -109,7 +142,6 @@
         </div>
       </div>
       <input type="file" id="file" accept="image/*" hidden>
-      <input type="password" id="key" class="key" placeholder="Admin key">
       <div class="bar" id="bar"><div></div></div>
       <div class="row">
         <button id="uploadBtn" class="accent" disabled>Upload &amp; make QR</button>
@@ -128,21 +160,81 @@
     <h2>Recent uploads</h2>
     <div class="thumbs" id="thumbs"></div>
   </section>
+  </div>
 </div>
 
 <script>
 const $ = (id) => document.getElementById(id);
 const drop = $('drop'), fileInput = $('file'), uploadBtn = $('uploadBtn'), clearBtn = $('clearBtn');
-const msg = $('msg'), keyInput = $('key'), bar = $('bar');
-let chosen = null, needsKey = false;
+const msg = $('msg'), bar = $('bar');
+let chosen = null, canDelete = false, timerId = null, endsAt = 0;
 const emptyDrop = $('dropInner').innerHTML; // restored by reset()
 
-fetch('/api/config').then(r => r.json()).then(c => {
-  needsKey = c.needsKey;
-  if (needsKey) { keyInput.style.display = 'block'; keyInput.value = localStorage.getItem('adminKey') || ''; }
-});
+fetch('/api/config').then(r => r.json()).then(c => { canDelete = c.canDelete; loadRecent(); });
 
 function say(text, err) { msg.textContent = text; msg.className = 'msg' + (err ? ' err' : ''); }
+
+// ---- registration code gate + 10 minute session ----
+const boxes = [...$('codeBoxes').children], gateMsg = $('gateMsg'), verifyBtn = $('verifyBtn');
+const gateSay = (text) => { gateMsg.textContent = text; gateMsg.className = 'msg' + (text ? ' err' : ''); };
+const codeValue = () => boxes.map(b => b.value).join('');
+
+function fillBoxes(text, from = 0) {
+  const digits = text.replace(/\D/g, '').slice(0, 5 - from).split('');
+  digits.forEach((d, i) => { boxes[from + i].value = d; });
+  if (digits.length) boxes[Math.min(from + digits.length, 4)].focus();
+  verifyBtn.disabled = codeValue().length !== 5;
+  gateSay('');
+}
+boxes.forEach((box, i) => {
+  box.addEventListener('input', () => { const v = box.value; box.value = ''; if (v.replace(/\D/g, '')) fillBoxes(v, i); else verifyBtn.disabled = codeValue().length !== 5; });
+  box.addEventListener('keydown', e => {
+    if (e.key === 'Backspace' && !box.value && i > 0) { boxes[i - 1].value = ''; boxes[i - 1].focus(); e.preventDefault(); verifyBtn.disabled = true; }
+    else if (e.key === 'Enter') verifyBtn.click();
+  });
+  box.addEventListener('focus', () => box.select());
+  box.addEventListener('paste', e => { e.preventDefault(); boxes.forEach(b => b.value = ''); fillBoxes(e.clipboardData.getData('text'), 0); });
+});
+
+function showGate(note) {
+  clearInterval(timerId);
+  $('app').hidden = true; $('gate').hidden = false;
+  boxes.forEach(b => b.value = ''); verifyBtn.disabled = true; boxes[0].focus();
+  gateSay(note || ''); reset(); say('');
+}
+function startSession(secondsLeft) {
+  endsAt = Date.now() + secondsLeft * 1000;
+  $('gate').hidden = true; $('app').hidden = false;
+  clearInterval(timerId);
+  const tick = () => {
+    const left = Math.max(0, Math.round((endsAt - Date.now()) / 1000));
+    $('timeLeft').textContent = `Session ends in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}`;
+    $('timeLeft').classList.toggle('low', left <= 60);
+    if (left === 0) showGate('Your 10 minutes are up. Enter your code to continue.');
+  };
+  tick(); timerId = setInterval(tick, 1000);
+  loadRecent();
+}
+async function endSession(note) {
+  try { await fetch('/api/session/done', { method: 'POST' }); } catch {}
+  showGate(note);
+}
+
+verifyBtn.addEventListener('click', async () => {
+  if (codeValue().length !== 5) return;
+  verifyBtn.disabled = true; gateSay('');
+  try {
+    const r = await fetch('/api/session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: codeValue() }) });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) { boxes.forEach(b => b.value = ''); boxes[0].focus(); return gateSay(data.error || 'Something went wrong.'); }
+    startSession(data.secondsLeft);
+  } catch { gateSay('We could not reach the server. Please try again.'); }
+  finally { verifyBtn.disabled = codeValue().length !== 5; }
+});
+$('doneTopBtn').addEventListener('click', () => endSession('Thanks! Enter a new code to upload another photo.'));
+
+// Already have a live session (page refresh)? Skip the gate.
+fetch('/api/session').then(r => r.json()).then(s => { if (s.active) startSession(s.secondsLeft); else boxes[0].focus(); });
 
 function choose(file) {
   if (!file || !file.type.startsWith('image/')) return say('That is not an image file.', true);
@@ -167,16 +259,15 @@ clearBtn.addEventListener('click', reset);
 
 uploadBtn.addEventListener('click', () => {
   if (!chosen) return;
-  if (needsKey) localStorage.setItem('adminKey', keyInput.value);
   const fd = new FormData(); fd.append('photo', chosen);
   const xhr = new XMLHttpRequest();
   xhr.open('POST', '/api/upload');
-  if (needsKey) xhr.setRequestHeader('x-admin-key', keyInput.value);
   bar.style.display = 'block'; uploadBtn.disabled = true; say('Uploading…');
   xhr.upload.onprogress = e => { if (e.lengthComputable) bar.firstElementChild.style.width = (e.loaded / e.total * 100) + '%'; };
   xhr.onload = () => {
     bar.style.display = 'none'; bar.firstElementChild.style.width = 0;
     let data = {}; try { data = JSON.parse(xhr.responseText); } catch {}
+    if (xhr.status === 401) return showGate('Your session ended. Enter your code to continue.');
     if (xhr.status !== 200) { uploadBtn.disabled = false; return say(data.error || 'Upload failed.', true); }
     say('Done! The QR screen now shows this photo.');
     showResult(data); reset(); loadRecent();
@@ -193,7 +284,12 @@ function showResult(p) {
     <div class="row" style="justify-content:center">
       <a class="btn" href="${p.qrUrl}" download="qr-${p.id}.png">Download QR</a>
       <a class="btn ghost" href="${p.viewUrl}" target="_blank">Open page</a>
-    </div>`;
+    </div>
+    <div class="row" style="justify-content:center">
+      <button class="btn" id="doneBtn">Done</button>
+    </div>
+    <p class="link" style="margin-top:6px">Press Done when you have finished. To add another photo, just choose it on the left.</p>`;
+  $('doneBtn').onclick = () => endSession('Thanks! Enter a new code to upload another photo.');
 }
 
 async function loadRecent() {
@@ -202,18 +298,19 @@ async function loadRecent() {
   for (const p of list) {
     const el = document.createElement('div'); el.className = 'thumb';
     el.innerHTML = `<img src="${p.imageUrl}" alt="">
-      <div class="acts"><a href="#" data-show>QR</a><button data-del>Delete</button></div>`;
+      <div class="acts"><a href="#" data-show>QR</a>${canDelete ? '<button data-del>Delete</button>' : ''}</div>`;
     el.querySelector('[data-show]').onclick = e => { e.preventDefault(); showResult(p); window.scrollTo({ top: 0, behavior: 'smooth' }); };
-    el.querySelector('[data-del]').onclick = async () => {
-      if (!confirm('Delete this photo?')) return;
-      const r = await fetch('/api/photos/' + p.id, { method: 'DELETE', headers: needsKey ? { 'x-admin-key': keyInput.value } : {} });
-      if (!r.ok) return say('Could not delete (check admin key).', true);
+    const del = el.querySelector('[data-del]');
+    if (del) del.onclick = async () => {
+      const key = prompt('Admin key to delete this photo:');
+      if (!key) return;
+      const r = await fetch('/api/photos/' + p.id, { method: 'DELETE', headers: { 'x-admin-key': key } });
+      if (!r.ok) return say('Could not delete (check the admin key).', true);
       loadRecent();
     };
     $('thumbs').appendChild(el);
   }
 }
-loadRecent();
 </script>
 </body>
 </html>
