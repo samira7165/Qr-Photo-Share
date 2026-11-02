@@ -10,9 +10,9 @@ npm start
 
 | Page | URL | Who uses it |
 |---|---|---|
-| Admin (drag & drop upload) | http://localhost:3000/admin | You / the operator |
-| QR screen | http://localhost:3000/display | Big screen for guests — auto-updates every 3 s with the latest photo |
-| Photo page | http://<your-ip>:3000/p/<id> | Opens on the guest's phone after scanning |
+| Admin (drag & drop upload) | http://localhost:3001/admin | You / the operator |
+| QR screen | http://localhost:3001/display | Big screen for guests — auto-updates every 3 s with the latest photo |
+| Photo page | http://<your-ip>:3001/p/<id> | Opens on the guest's phone after scanning |
 
 ## Making the QR work on phones
 The QR points at your computer's Wi-Fi IP, so **the phone must be on the same Wi-Fi**.

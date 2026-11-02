@@ -9,7 +9,7 @@ const crypto = require('crypto');
 // Read settings from .env when it exists (Node 20.12+). Values already in the environment win.
 try { process.loadEnvFile(path.join(__dirname, '.env')); } catch {}
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001; // 3000 is used by the Nescafe app
 const ADMIN_KEY = process.env.ADMIN_KEY || ''; // needed to delete photos
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 const DB_FILE = path.join(__dirname, 'data.json');
