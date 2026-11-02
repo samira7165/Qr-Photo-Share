@@ -1,0 +1,8 @@
+node_modules/
+.env
+
+# Visitor data: photos, the photo list and the used-code list stay on the server, never in git.
+data.json
+used-codes.json
+uploads/*
+!uploads/.gitkeep
