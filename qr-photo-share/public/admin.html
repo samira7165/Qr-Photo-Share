@@ -159,12 +159,13 @@
       <div id="result"><div class="empty">Your QR code will appear here.</div></div>
     </section>
   </div>
+  </div>
 
+  <!-- Outside the code gate: the operator can always see and delete photos (deleting needs the admin key). -->
   <section class="recent">
     <h2>Recent uploads</h2>
     <div class="thumbs" id="thumbs"></div>
   </section>
-  </div>
 </div>
 
 <script>
@@ -328,7 +329,7 @@ async function loadRecent() {
     const el = document.createElement('div'); el.className = 'thumb';
     el.innerHTML = `<img src="${p.imageUrl}" alt="">
       <div class="acts"><a href="#" data-show>QR</a>${canDelete ? '<button data-del>Delete</button>' : ''}</div>`;
-    el.querySelector('[data-show]').onclick = e => { e.preventDefault(); showResult(p); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+    el.querySelector('[data-show]').onclick = e => { e.preventDefault(); if ($('app').hidden) return window.open(p.viewUrl, '_blank'); showResult(p); window.scrollTo({ top: 0, behavior: 'smooth' }); };
     const del = el.querySelector('[data-del]');
     if (del) del.onclick = async () => {
       const key = prompt('Admin key to delete this photo:');
