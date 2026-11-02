@@ -43,6 +43,10 @@
   .drop .icon { line-height: 0; color: #fff; }
   .drop strong { display: block; font-family: "Better Times", "Poppins", cursive; font-size: 1.8rem; font-weight: 400; margin: 12px 0 6px; }
   .drop small { color: var(--muted); }
+  .previews { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; max-height: 260px; overflow-y: auto; }
+  .previews img { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 8px; display: block; }
+  .qr-list { display: grid; gap: 18px; max-height: 70vh; overflow-y: auto; margin-bottom: 14px; }
+  .qr-list .result img.qr, .qr-card img.qr { width: 200px; }
   .drop img.preview { max-width: 100%; max-height: 260px; border-radius: 10px; }
   .row { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
   .key { width: 100%; padding: .7rem 1rem; border-radius: 12px; border: 1px solid var(--line); background: #fff; color: #2b2118; font: inherit; margin-top: 14px; display: none; }
@@ -137,11 +141,11 @@
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
             </svg>
           </div>
-          <strong>Drag &amp; drop a photo here</strong>
-          <small>or click to choose · JPG, PNG, WEBP, GIF · up to 15&nbsp;MB</small>
+          <strong>Drag &amp; drop photos here</strong>
+          <small>or click to choose · up to 10 photos · JPG, PNG, WEBP, GIF · 15&nbsp;MB each</small>
         </div>
       </div>
-      <input type="file" id="file" accept="image/*" hidden>
+      <input type="file" id="file" accept="image/*" multiple hidden>
       <div class="bar" id="bar"><div></div></div>
       <div class="row">
         <button id="uploadBtn" class="accent" disabled>Upload &amp; make QR</button>
@@ -236,61 +240,86 @@ $('doneTopBtn').addEventListener('click', () => endSession('Thanks! Enter a new 
 // Already have a live session (page refresh)? Skip the gate.
 fetch('/api/session').then(r => r.json()).then(s => { if (s.active) startSession(s.secondsLeft); else boxes[0].focus(); });
 
-function choose(file) {
-  if (!file || !file.type.startsWith('image/')) return say('That is not an image file.', true);
-  chosen = file;
-  const url = URL.createObjectURL(file);
-  $('dropInner').innerHTML = `<img class="preview" src="${url}" alt=""><small style="display:block;margin-top:8px">${file.name}</small>`;
-  uploadBtn.disabled = false; clearBtn.disabled = false; say('');
+const MAX_FILES = 10;
+let files = []; // photos waiting to be uploaded with this code
+
+function choose(list) {
+  const picked = [...(list || [])].filter(f => f.type.startsWith('image/'));
+  if (!picked.length) return say('That is not an image file.', true);
+  // Adding more keeps what is already chosen, up to the limit.
+  const total = files.length + picked.length;
+  files = [...files, ...picked].slice(0, MAX_FILES);
+  chosen = files.length > 0;
+  $('dropInner').innerHTML = '<div class="previews">' + files.map(f => '<img src="' + URL.createObjectURL(f) + '" alt="">').join('') + '</div>' +
+    '<small style="display:block;margin-top:8px">' + files.length + (files.length === 1 ? ' photo' : ' photos') + ' ready' + (files.length === MAX_FILES ? ' (maximum)' : ' · click to add more') + '</small>';
+  uploadBtn.disabled = false; clearBtn.disabled = false;
+  uploadBtn.textContent = files.length > 1 ? 'Upload ' + files.length + ' photos & make QRs' : 'Upload & make QR';
+  say(total > MAX_FILES ? 'You can upload up to ' + MAX_FILES + ' photos at a time.' : '');
 }
 function reset() {
-  chosen = null; fileInput.value = '';
+  chosen = null; files = []; fileInput.value = '';
   $('dropInner').innerHTML = emptyDrop;
-  uploadBtn.disabled = true; clearBtn.disabled = true;
+  uploadBtn.disabled = true; clearBtn.disabled = true; uploadBtn.textContent = 'Upload & make QR';
 }
 
 drop.addEventListener('click', () => fileInput.click());
 drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
-fileInput.addEventListener('change', () => choose(fileInput.files[0]));
+fileInput.addEventListener('change', () => { choose(fileInput.files); fileInput.value = ''; });
 ['dragenter', 'dragover'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.add('over'); }));
 ['dragleave', 'drop'].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove('over'); }));
-drop.addEventListener('drop', e => choose(e.dataTransfer.files[0]));
+drop.addEventListener('drop', e => choose(e.dataTransfer.files));
 clearBtn.addEventListener('click', reset);
 
-uploadBtn.addEventListener('click', () => {
-  if (!chosen) return;
-  const fd = new FormData(); fd.append('photo', chosen);
-  const xhr = new XMLHttpRequest();
-  xhr.open('POST', '/api/upload');
-  bar.style.display = 'block'; uploadBtn.disabled = true; say('Uploading…');
-  xhr.upload.onprogress = e => { if (e.lengthComputable) bar.firstElementChild.style.width = (e.loaded / e.total * 100) + '%'; };
-  xhr.onload = () => {
-    bar.style.display = 'none'; bar.firstElementChild.style.width = 0;
-    let data = {}; try { data = JSON.parse(xhr.responseText); } catch {}
-    if (xhr.status === 401) return showGate('Your session ended. Enter your code to continue.');
-    if (xhr.status !== 200) { uploadBtn.disabled = false; return say(data.error || 'Upload failed.', true); }
-    say('Done! The QR screen now shows this photo.');
-    showResult(data); reset(); loadRecent();
-  };
-  xhr.onerror = () => { bar.style.display = 'none'; uploadBtn.disabled = false; say('Network error.', true); };
-  xhr.send(fd);
+// Sends one photo; resolves to { status, data }.
+function sendOne(file, onProgress) {
+  return new Promise(resolve => {
+    const fd = new FormData(); fd.append('photo', file);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/upload');
+    xhr.upload.onprogress = e => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+    xhr.onload = () => { let data = {}; try { data = JSON.parse(xhr.responseText); } catch {} resolve({ status: xhr.status, data }); };
+    xhr.onerror = () => resolve({ status: 0, data: { error: 'Network error.' } });
+    xhr.send(fd);
+  });
+}
+
+uploadBtn.addEventListener('click', async () => {
+  if (!files.length) return;
+  const queue = [...files], done = [];
+  uploadBtn.disabled = true; clearBtn.disabled = true; bar.style.display = 'block';
+  for (let i = 0; i < queue.length; i++) {
+    say('Uploading photo ' + (i + 1) + ' of ' + queue.length + '…');
+    const { status, data } = await sendOne(queue[i], p => { bar.firstElementChild.style.width = ((i + p) / queue.length * 100) + '%'; });
+    if (status === 401) { bar.style.display = 'none'; return showGate('Your session ended. Enter your code to continue.'); }
+    if (status !== 200) {
+      // Keep what did not go through so it can be retried.
+      bar.style.display = 'none'; bar.firstElementChild.style.width = 0;
+      files = queue.slice(i); uploadBtn.disabled = false; clearBtn.disabled = false;
+      if (done.length) showResults(done);
+      return say((data.error || 'Upload failed.') + (done.length ? ' ' + done.length + ' of ' + queue.length + ' were uploaded.' : ''), true);
+    }
+    done.push(data);
+  }
+  bar.style.display = 'none'; bar.firstElementChild.style.width = 0;
+  say(done.length === 1 ? 'Done! The QR screen now shows this photo.' : 'Done! ' + done.length + ' photos uploaded.');
+  showResults(done); reset(); loadRecent();
 });
 
-function showResult(p) {
-  $('result').innerHTML = `
-    <h2 style="margin-top:0">Scan me</h2>
-    <img class="qr" src="${p.qrUrl}" alt="QR code">
-    <div class="link">${p.viewUrl}</div>
-    <div class="row" style="justify-content:center">
-      <a class="btn" href="${p.qrUrl}" download="qr-${p.id}.png">Download QR</a>
-      <a class="btn ghost" href="${p.viewUrl}" target="_blank">Open page</a>
-    </div>
-    <div class="row" style="justify-content:center">
-      <button class="btn" id="doneBtn">Done</button>
-    </div>
-    <p class="link" style="margin-top:6px">Press Done when you have finished. To add another photo, just choose it on the left.</p>`;
-  $('doneBtn').onclick = () => endSession('Thanks! Enter a new code to upload another photo.');
+// One QR card per photo, newest first, with a single Done button for the whole visit.
+function showResults(list) {
+  const cards = list.map(p => '<div class="qr-card">' +
+    '<img class="qr" src="' + p.qrUrl + '" alt="QR code">' +
+    '<div class="link">' + p.viewUrl + '</div>' +
+    '<div class="row" style="justify-content:center">' +
+    '<a class="btn" href="' + p.qrUrl + '" download="qr-' + p.id + '.png">Download QR</a>' +
+    '<a class="btn ghost" href="' + p.viewUrl + '" target="_blank">Open page</a></div></div>').join('');
+  $('result').innerHTML = '<h2 style="margin-top:0">' + (list.length > 1 ? 'Scan me (' + list.length + ' photos)' : 'Scan me') + '</h2>' +
+    '<div class="qr-list">' + cards + '</div>' +
+    '<div class="row" style="justify-content:center"><button class="btn" id="doneBtn">Done</button></div>' +
+    '<p class="link" style="margin-top:6px">Press Done when you have finished. You can keep adding photos with the same code until the time is up.</p>';
+  $('doneBtn').onclick = () => endSession('Thanks! Enter a new code to upload more photos.');
 }
+const showResult = (p) => showResults([p]);
 
 async function loadRecent() {
   const list = await fetch('/api/photos').then(r => r.json());
